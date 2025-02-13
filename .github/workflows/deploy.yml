@@ -13,8 +13,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Updated Docker setup step with proper key handling
       - name: Set up Docker
         run: |
+          sudo apt update
+          sudo apt install -y ca-certificates curl gnupg lsb-release
+
+          # Download and dearmor the Docker GPG key
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          sudo chmod a+r /usr/share/keyrings/docker-archive-keyring.gpg
+
+          # Force using Ubuntu 22.04 (Jammy) repository for Docker
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
           sudo apt update
           sudo apt install -y docker-ce docker-ce-cli containerd.io
 
@@ -26,6 +37,16 @@ jobs:
           docker build -t aiyus1/fastapi-app .
           docker push aiyus1/fastapi-app
 
+      - name: Test SSH Connection
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > private_key && chmod 600 private_key
+          ssh -v -o StrictHostKeyChecking=no -i private_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "echo 'SSH connection successful'"
+          rm -f private_key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+
       - name: Deploy to server
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > private_key && chmod 600 private_key
@@ -36,3 +57,7 @@ jobs:
             docker run -d -p 8000:8000 --name fastapi-app aiyus1/fastapi-app:latest
           EOF
           rm -f private_key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
